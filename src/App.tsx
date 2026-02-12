@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
-import { ChatMessage, ChatProgress, Profile } from "./types";
+import { ChatMessage, ChatProgress, MediaItem, Profile } from "./types";
 
 const DEMO_USERS = [
   { email: "user1@demo.local", password: "Demo1234!", label: "User 1" },
@@ -19,6 +19,9 @@ const EMPTY_PROGRESS: ChatProgress = {
   unlocked: false
 };
 
+const MEDIA_SELECT_COLUMNS =
+  "id,owner_id,seed_key,kind,url,text_content,label,unlock_min_messages,created_at" as const;
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState(DEMO_USERS[0].email);
@@ -32,12 +35,18 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageDraft, setMessageDraft] = useState("");
   const [appError, setAppError] = useState<string | null>(null);
-  const [avatarUnlockedByProfile, setAvatarUnlockedByProfile] = useState<
-    Record<string, boolean>
-  >({});
   const [progressByProfile, setProgressByProfile] = useState<
     Record<string, ChatProgress>
   >({});
+  const [myMediaItems, setMyMediaItems] = useState<MediaItem[]>([]);
+  const [selectedMyMediaId, setSelectedMyMediaId] = useState<number | null>(
+    null
+  );
+  const [selectedMyMediaUnlockDraft, setSelectedMyMediaUnlockDraft] =
+    useState<string>("");
+  const [selectedMyMediaTextDraft, setSelectedMyMediaTextDraft] =
+    useState<string>("");
+  const [targetMediaItems, setTargetMediaItems] = useState<MediaItem[]>([]);
 
   const userId = session?.user.id ?? null;
   const selectedProfile = useMemo(() => {
@@ -71,30 +80,6 @@ export default function App() {
       subscription.unsubscribe();
     };
   }, []);
-
-  const refreshUnlockState = useCallback(
-    async (targetUserId: string): Promise<void> => {
-      if (!userId) {
-        return;
-      }
-
-      const { data, error } = await supabase.rpc("can_view_avatar", {
-        viewer_id: userId,
-        target_id: targetUserId
-      });
-
-      if (error) {
-        setAppError(error.message);
-        return;
-      }
-
-      setAvatarUnlockedByProfile((prev) => ({
-        ...prev,
-        [targetUserId]: Boolean(data)
-      }));
-    },
-    [userId]
-  );
 
   const refreshProgress = useCallback(
     async (targetUserId: string): Promise<void> => {
@@ -133,6 +118,67 @@ export default function App() {
     [userId]
   );
 
+  const loadMyMedia = useCallback(async (): Promise<void> => {
+    if (!userId) {
+      setMyMediaItems([]);
+      setSelectedMyMediaId(null);
+      setSelectedMyMediaUnlockDraft("");
+      setSelectedMyMediaTextDraft("");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("media_items")
+      .select(MEDIA_SELECT_COLUMNS)
+      .eq("owner_id", userId)
+      .order("id", { ascending: true });
+
+    if (error) {
+      setAppError(error.message);
+      return;
+    }
+
+    setMyMediaItems((data ?? []) as MediaItem[]);
+  }, [userId]);
+
+  const selectedMyMediaItem = useMemo(() => {
+    if (selectedMyMediaId === null) {
+      return null;
+    }
+    return myMediaItems.find((item) => item.id === selectedMyMediaId) ?? null;
+  }, [myMediaItems, selectedMyMediaId]);
+
+  useEffect(() => {
+    if (!selectedMyMediaItem) {
+      setSelectedMyMediaUnlockDraft("");
+      setSelectedMyMediaTextDraft("");
+      return;
+    }
+
+    setSelectedMyMediaUnlockDraft(String(selectedMyMediaItem.unlock_min_messages));
+    setSelectedMyMediaTextDraft(selectedMyMediaItem.text_content ?? "");
+  }, [selectedMyMediaItem]);
+
+  const loadTargetMedia = useCallback(async (): Promise<void> => {
+    if (!selectedProfileId) {
+      setTargetMediaItems([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("media_items")
+      .select(MEDIA_SELECT_COLUMNS)
+      .eq("owner_id", selectedProfileId)
+      .order("id", { ascending: true });
+
+    if (error) {
+      setAppError(error.message);
+      return;
+    }
+
+    setTargetMediaItems((data ?? []) as MediaItem[]);
+  }, [selectedProfileId]);
+
   const loadProfiles = useCallback(async (): Promise<void> => {
     if (!userId) {
       return;
@@ -155,13 +201,10 @@ export default function App() {
 
     await Promise.all(
       profileRows.map(async (profile) => {
-        await Promise.all([
-          refreshUnlockState(profile.id),
-          refreshProgress(profile.id)
-        ]);
+        await refreshProgress(profile.id);
       })
     );
-  }, [refreshProgress, refreshUnlockState, userId]);
+  }, [refreshProgress, userId]);
 
   const loadMessages = useCallback(async (): Promise<void> => {
     if (!activeRoomKey) {
@@ -188,13 +231,46 @@ export default function App() {
       setProfiles([]);
       setSelectedProfileId(null);
       setMessages([]);
-      setAvatarUnlockedByProfile({});
       setProgressByProfile({});
+      setMyMediaItems([]);
+      setSelectedMyMediaId(null);
+      setSelectedMyMediaUnlockDraft("");
+      setSelectedMyMediaTextDraft("");
+      setTargetMediaItems([]);
       return;
     }
 
-    void loadProfiles();
-  }, [loadProfiles, userId]);
+    const ensureAndLoad = async (): Promise<void> => {
+      setAppError(null);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) {
+        setAppError(error.message);
+        return;
+      }
+
+      if (!data) {
+        setAuthError(
+          "Session ist nicht mehr gueltig (z.B. nach supabase db reset). Bitte erneut einloggen."
+        );
+        await supabase.auth.signOut();
+        return;
+      }
+
+      await Promise.all([loadProfiles(), loadMyMedia()]);
+    };
+
+    void ensureAndLoad();
+  }, [loadMyMedia, loadProfiles, userId]);
+
+  useEffect(() => {
+    void loadTargetMedia();
+  }, [loadTargetMedia]);
 
   useEffect(() => {
     if (!activeRoomKey || !selectedProfileId) {
@@ -203,6 +279,7 @@ export default function App() {
     }
 
     void loadMessages();
+    void loadTargetMedia();
 
     const channel = supabase
       .channel(`room-${activeRoomKey}`)
@@ -223,8 +300,8 @@ export default function App() {
 
             return [...previous, row];
           });
-          void refreshUnlockState(selectedProfileId);
           void refreshProgress(selectedProfileId);
+          void loadTargetMedia();
         }
       )
       .subscribe();
@@ -232,7 +309,7 @@ export default function App() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [activeRoomKey, loadMessages, refreshProgress, refreshUnlockState, selectedProfileId]);
+  }, [activeRoomKey, loadMessages, loadTargetMedia, refreshProgress, selectedProfileId]);
 
   const handleEmailPasswordLogin = async (
     event: FormEvent<HTMLFormElement>
@@ -317,10 +394,45 @@ export default function App() {
       });
     }
 
-    await Promise.all([
-      refreshUnlockState(selectedProfileId),
-      refreshProgress(selectedProfileId)
-    ]);
+    await Promise.all([refreshProgress(selectedProfileId), loadTargetMedia()]);
+  };
+
+  const handleUpdateSelectedMyMedia = async (
+    event: FormEvent<HTMLFormElement>
+  ): Promise<void> => {
+    event.preventDefault();
+
+    if (!selectedMyMediaItem) {
+      return;
+    }
+
+    const value = Number.parseInt(selectedMyMediaUnlockDraft.trim(), 10);
+    if (!Number.isFinite(value) || value < 0) {
+      setAppError("Ungültiger Wert (>= 0).");
+      return;
+    }
+
+    const update: Record<string, unknown> = { unlock_min_messages: value };
+    if (selectedMyMediaItem.kind === "text") {
+      const cleanText = selectedMyMediaTextDraft.trim();
+      if (!cleanText) {
+        setAppError("Text darf nicht leer sein.");
+        return;
+      }
+      update.text_content = cleanText;
+    }
+
+    const { error } = await supabase
+      .from("media_items")
+      .update(update)
+      .eq("id", selectedMyMediaItem.id);
+
+    if (error) {
+      setAppError(error.message);
+      return;
+    }
+
+    await loadMyMedia();
   };
 
   if (!session) {
@@ -379,7 +491,6 @@ export default function App() {
         <h2>Profile</h2>
         <ul>
           {profiles.map((profile) => {
-            const unlocked = avatarUnlockedByProfile[profile.id] ?? false;
             const progress = progressByProfile[profile.id] ?? EMPTY_PROGRESS;
 
             return (
@@ -392,25 +503,82 @@ export default function App() {
                 </button>
                 <div>Email: {profile.email}</div>
                 <div>
-                  Progress: du {progress.viewer_sent}/3, gegenüber{" "}
-                  {progress.target_sent}/3
+                  Progress: du {progress.viewer_sent}, gegenüber {progress.target_sent}
                 </div>
-                <div>Freigeschaltet: {unlocked ? "Ja" : "Nein"}</div>
-                {unlocked && profile.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={`Profilbild ${profile.display_name}`}
-                    width={120}
-                    height={120}
-                  />
-                ) : (
-                  <div>Profilbild gesperrt</div>
-                )}
               </li>
             );
           })}
         </ul>
       </section>
+
+	      <section>
+	        <h2>My Media</h2>
+	        <p>
+	          Klicke ein Item und setze, ab wie vielen Nachrichten pro Richtung es
+	          sichtbar sein soll (beide muessen mindestens X senden).
+	        </p>
+	        {myMediaItems.length === 0 ? (
+	          <p>
+	            Keine Items gefunden. Tipp: Seeds sind fuer User1 und User2 vorhanden.
+	            Wenn du gerade die DB resettet hast: einmal Logout und neu einloggen.
+	          </p>
+	        ) : null}
+	        <ul>
+	          {myMediaItems.map((item) => (
+	            <li key={item.id}>
+	              <button
+	                type="button"
+	                onClick={() => setSelectedMyMediaId(item.id)}
+	              >
+	                Auswaehlen {item.label ?? `#${item.id}`} ({item.kind})
+	              </button>
+	              <div>Unlock ab: {item.unlock_min_messages}</div>
+	              {item.kind === "image" ? (
+	                item.url ? (
+	                  <img
+	                    src={item.url}
+	                    alt={item.label ?? `Media ${item.id}`}
+	                    width={120}
+	                    height={120}
+	                  />
+	                ) : (
+	                  <div>Fehler: Bild-URL fehlt</div>
+	                )
+	              ) : (
+	                <pre>{item.text_content ?? ""}</pre>
+	              )}
+	            </li>
+	          ))}
+	        </ul>
+
+	        {selectedMyMediaItem ? (
+	          <form onSubmit={handleUpdateSelectedMyMedia}>
+	            <div>
+	              Ausgewaehlt: {selectedMyMediaItem.label ?? `#${selectedMyMediaItem.id}`}
+	            </div>
+	            <div>Typ: {selectedMyMediaItem.kind}</div>
+	            {selectedMyMediaItem.kind === "text" ? (
+	              <textarea
+	                value={selectedMyMediaTextDraft}
+	                onChange={(event) => setSelectedMyMediaTextDraft(event.target.value)}
+	                placeholder="Text (freies Feld)"
+	                rows={4}
+	                cols={40}
+	              />
+	            ) : null}
+	            <input
+	              type="number"
+	              min={0}
+	              value={selectedMyMediaUnlockDraft}
+	              onChange={(event) => setSelectedMyMediaUnlockDraft(event.target.value)}
+	              placeholder="Unlock-Min (z.B. 3)"
+	            />
+	            <button type="submit">Speichern</button>
+	          </form>
+	        ) : (
+	          <p>Kein Item ausgewaehlt.</p>
+	        )}
+	      </section>
 
       <section>
         <h2>Chat</h2>
@@ -439,6 +607,39 @@ export default function App() {
           </>
         )}
       </section>
+
+	      <section>
+	        <h2>Media vom Profil</h2>
+	        {!selectedProfile ? (
+	          <p>Bitte ein Profil auswählen.</p>
+	        ) : targetMediaItems.length === 0 ? (
+	          <p>Keine freigeschalteten Items (noch).</p>
+	        ) : (
+	          <ul>
+	            {targetMediaItems.map((item) => (
+	              <li key={item.id}>
+	                <div>
+	                  {item.label ?? `#${item.id}`} (Unlock ab: {item.unlock_min_messages})
+	                </div>
+	                {item.kind === "image" ? (
+	                  item.url ? (
+	                    <img
+	                      src={item.url}
+	                      alt={item.label ?? `Media ${item.id}`}
+	                      width={120}
+	                      height={120}
+	                    />
+	                  ) : (
+	                    <div>Fehler: Bild-URL fehlt</div>
+	                  )
+	                ) : (
+	                  <pre>{item.text_content ?? ""}</pre>
+	                )}
+	              </li>
+	            ))}
+	          </ul>
+	        )}
+	      </section>
     </main>
   );
 }

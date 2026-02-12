@@ -19,3 +19,15 @@ export type ChatProgress = {
   target_sent: number;
   unlocked: boolean;
 };
+
+export type MediaItem = {
+  id: number;
+  owner_id: string;
+  seed_key: string;
+  kind: "image" | "text";
+  url: string | null;
+  text_content: string | null;
+  label: string | null;
+  unlock_min_messages: number;
+  created_at: string;
+};

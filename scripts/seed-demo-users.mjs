@@ -38,13 +38,79 @@ const DEMO_USERS = [
     email: "user1@demo.local",
     password: "Demo1234!",
     displayName: "User 1",
-    avatarUrl: "https://i.pravatar.cc/200?img=1"
+    avatarUrl: "https://i.pravatar.cc/200?img=1",
+    media: [
+      ...Array.from({ length: 5 }).map((_, index) => {
+        const number = index + 1;
+        return {
+          seedKey: `u1-img-${number}`,
+          kind: "image",
+          label: `U1-IMG-${number}`,
+          url: `https://picsum.photos/seed/unlockpoc-u1-${number}/300/300`,
+          unlockMinMessages: 3
+        };
+      }),
+      {
+        seedKey: "u1-txt-1",
+        kind: "text",
+        label: "U1-TXT-1",
+        textContent: "User 1 Text Snippet #1 (freies Feld)",
+        unlockMinMessages: 1
+      },
+      {
+        seedKey: "u1-txt-2",
+        kind: "text",
+        label: "U1-TXT-2",
+        textContent: "User 1 Text Snippet #2 (freies Feld)",
+        unlockMinMessages: 3
+      },
+      {
+        seedKey: "u1-txt-3",
+        kind: "text",
+        label: "U1-TXT-3",
+        textContent: "User 1 Text Snippet #3 (freies Feld)",
+        unlockMinMessages: 5
+      }
+    ]
   },
   {
     email: "user2@demo.local",
     password: "Demo1234!",
     displayName: "User 2",
-    avatarUrl: "https://i.pravatar.cc/200?img=2"
+    avatarUrl: "https://i.pravatar.cc/200?img=2",
+    media: [
+      ...Array.from({ length: 5 }).map((_, index) => {
+        const number = index + 1;
+        return {
+          seedKey: `u2-img-${number}`,
+          kind: "image",
+          label: `U2-IMG-${number}`,
+          url: `https://picsum.photos/seed/unlockpoc-u2-${number}/300/300`,
+          unlockMinMessages: 3
+        };
+      }),
+      {
+        seedKey: "u2-txt-1",
+        kind: "text",
+        label: "U2-TXT-1",
+        textContent: "User 2 Text Snippet #1 (freies Feld)",
+        unlockMinMessages: 1
+      },
+      {
+        seedKey: "u2-txt-2",
+        kind: "text",
+        label: "U2-TXT-2",
+        textContent: "User 2 Text Snippet #2 (freies Feld)",
+        unlockMinMessages: 3
+      },
+      {
+        seedKey: "u2-txt-3",
+        kind: "text",
+        label: "U2-TXT-3",
+        textContent: "User 2 Text Snippet #3 (freies Feld)",
+        unlockMinMessages: 5
+      }
+    ]
   },
   {
     email: "user3@demo.local",
@@ -106,6 +172,26 @@ const ensureDemoUser = async (demoUser) => {
 
   if (profileError) {
     throw profileError;
+  }
+
+  if (Array.isArray(demoUser.media) && demoUser.media.length > 0) {
+    const rows = demoUser.media.map((item) => ({
+      owner_id: user.id,
+      seed_key: item.seedKey,
+      kind: item.kind,
+      url: item.kind === "image" ? item.url : null,
+      text_content: item.kind === "text" ? item.textContent : null,
+      label: item.label ?? null,
+      unlock_min_messages: item.unlockMinMessages ?? 3
+    }));
+
+    const { error: mediaError } = await admin
+      .from("media_items")
+      .upsert(rows, { onConflict: "owner_id,seed_key" });
+
+    if (mediaError) {
+      throw mediaError;
+    }
   }
 };
 
