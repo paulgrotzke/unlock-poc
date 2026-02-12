@@ -22,6 +22,12 @@ const EMPTY_PROGRESS: ChatProgress = {
 const MEDIA_SELECT_COLUMNS =
   "id,owner_id,seed_key,kind,url,text_content,label,unlock_min_messages,created_at" as const;
 
+type ChatTargetRow = Profile & {
+  viewer_sent: number;
+  target_sent: number;
+  unlocked: boolean;
+};
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState(DEMO_USERS[0].email);
@@ -185,26 +191,32 @@ export default function App() {
     }
 
     setAppError(null);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,email,display_name,avatar_url")
-      .neq("id", userId)
-      .order("display_name", { ascending: true });
+    const { data, error } = await supabase.rpc("list_chat_targets_with_progress");
 
     if (error) {
       setAppError(error.message);
       return;
     }
 
-    const profileRows = (data ?? []) as Profile[];
-    setProfiles(profileRows);
+    const rows = (data ?? []) as ChatTargetRow[];
+    const profileRows: Profile[] = rows.map((row) => ({
+      id: row.id,
+      display_name: row.display_name,
+      avatar_url: row.avatar_url
+    }));
 
-    await Promise.all(
-      profileRows.map(async (profile) => {
-        await refreshProgress(profile.id);
-      })
+    setProfiles(profileRows);
+    setProgressByProfile(
+      rows.reduce<Record<string, ChatProgress>>((accumulator, row) => {
+        accumulator[row.id] = {
+          viewer_sent: Number(row.viewer_sent),
+          target_sent: Number(row.target_sent),
+          unlocked: Boolean(row.unlocked)
+        };
+        return accumulator;
+      }, {})
     );
-  }, [refreshProgress, userId]);
+  }, [userId]);
 
   const loadMessages = useCallback(async (): Promise<void> => {
     if (!activeRoomKey) {
@@ -501,7 +513,6 @@ export default function App() {
                 >
                   Chat mit {profile.display_name}
                 </button>
-                <div>Email: {profile.email}</div>
                 <div>
                   Progress: du {progress.viewer_sent}, gegenüber {progress.target_sent}
                 </div>

@@ -160,6 +160,18 @@ const ensureDemoUser = async (demoUser) => {
     user = data.user;
   }
 
+  const { data: updatedData, error: updateAuthError } =
+    await admin.auth.admin.updateUserById(user.id, {
+      password: demoUser.password,
+      email_confirm: true
+    });
+
+  if (updateAuthError) {
+    throw updateAuthError;
+  }
+
+  user = updatedData.user ?? user;
+
   const { error: profileError } = await admin.from("profiles").upsert(
     {
       id: user.id,
@@ -193,11 +205,34 @@ const ensureDemoUser = async (demoUser) => {
       throw mediaError;
     }
   }
+
+  return user;
 };
 
 const run = async () => {
+  const demoUserIds = [];
+
   for (const demoUser of DEMO_USERS) {
-    await ensureDemoUser(demoUser);
+    const user = await ensureDemoUser(demoUser);
+    demoUserIds.push(user.id);
+  }
+
+  const contactRows = [];
+  for (const ownerId of demoUserIds) {
+    for (const contactId of demoUserIds) {
+      if (ownerId === contactId) {
+        continue;
+      }
+      contactRows.push({ owner_id: ownerId, contact_id: contactId });
+    }
+  }
+
+  const { error: contactsError } = await admin
+    .from("user_contacts")
+    .upsert(contactRows, { onConflict: "owner_id,contact_id" });
+
+  if (contactsError) {
+    throw contactsError;
   }
 
   console.log("Demo users are ready:");
