@@ -60,3 +60,44 @@ npm run dev
 3. In "My Media" bei User 2 ein Bild auswählen und `Unlock-Min` z.B. auf `1` setzen.
 4. Beide senden im gleichen Chat je 1 Nachricht.
 5. In Fenster A im Abschnitt "Media vom Profil" erscheinen dann die freigeschalteten Bilder von User 2 (je nach konfiguriertem `Unlock-Min`).
+
+## Verifikation (Supabase konfiguriert vs. nicht konfiguriert)
+
+### 1) Supabase **nicht** konfiguriert
+
+1. Stelle sicher, dass `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY` **nicht gesetzt** sind (leer/fehlend).
+   - Z.B. in `.env.local` auskommentieren oder Datei temporaer umbenennen.
+2. Dev-Server starten:
+
+```bash
+npm run dev
+```
+
+3. Erwartung im Browser:
+   - Es erscheint ein Setup-Screen "Supabase ist nicht konfiguriert" (keine Blank Page).
+   - Keine roten Error-Overlays durch Import-/Init-Fehler.
+   - Keine Supabase Requests/Queries werden ausgefuehrt.
+
+Optional (Build-Sanity-Check ohne Env):
+
+```bash
+VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= npm run build
+```
+
+### 2) Supabase konfiguriert
+
+1. Lege/aktualisiere `.env.local` im Projekt-Root:
+
+```bash
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+```
+
+2. Dev-Server **neu starten** (Env Vars werden von Vite nur beim Start gelesen):
+
+```bash
+npm run dev
+```
+
+3. Erwartung im Browser:
+   - Die App zeigt wie zuvor den Login-Flow und nutzt Supabase wie gewohnt.
