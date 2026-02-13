@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Session } from "@supabase/supabase-js";
-import { supabase } from "./lib/supabase";
+import { getSupabaseClient } from "./lib/supabase";
 import { ChatMessage, ChatProgress, MediaItem, Profile } from "./types";
 
 const DEMO_USERS = [
@@ -66,7 +66,13 @@ export default function App() {
     return buildRoomKey(userId, selectedProfileId);
   }, [selectedProfileId, userId]);
 
+  const supabase = useMemo(() => getSupabaseClient(), []);
+
   useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     const init = async () => {
       const {
         data: { session: initialSession }
@@ -85,10 +91,14 @@ export default function App() {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [supabase]);
 
   const refreshProgress = useCallback(
     async (targetUserId: string): Promise<void> => {
+      if (!supabase) {
+        return;
+      }
+
       if (!userId) {
         return;
       }
@@ -121,10 +131,14 @@ export default function App() {
         }
       }));
     },
-    [userId]
+    [supabase, userId]
   );
 
   const loadMyMedia = useCallback(async (): Promise<void> => {
+    if (!supabase) {
+      return;
+    }
+
     if (!userId) {
       setMyMediaItems([]);
       setSelectedMyMediaId(null);
@@ -145,7 +159,7 @@ export default function App() {
     }
 
     setMyMediaItems((data ?? []) as MediaItem[]);
-  }, [userId]);
+  }, [supabase, userId]);
 
   const selectedMyMediaItem = useMemo(() => {
     if (selectedMyMediaId === null) {
@@ -166,6 +180,10 @@ export default function App() {
   }, [selectedMyMediaItem]);
 
   const loadTargetMedia = useCallback(async (): Promise<void> => {
+    if (!supabase) {
+      return;
+    }
+
     if (!selectedProfileId) {
       setTargetMediaItems([]);
       return;
@@ -183,14 +201,21 @@ export default function App() {
     }
 
     setTargetMediaItems((data ?? []) as MediaItem[]);
-  }, [selectedProfileId]);
+  }, [supabase, selectedProfileId]);
 
   const loadProfiles = useCallback(async (): Promise<void> => {
+    if (!supabase) {
+      return;
+    }
+
     if (!userId) {
       return;
     }
 
     setAppError(null);
+    if (!supabase) {
+      return;
+    }
     const { data, error } = await supabase.rpc("list_chat_targets_with_progress");
 
     if (error) {
@@ -216,9 +241,13 @@ export default function App() {
         return accumulator;
       }, {})
     );
-  }, [userId]);
+  }, [supabase, userId]);
 
   const loadMessages = useCallback(async (): Promise<void> => {
+    if (!supabase) {
+      return;
+    }
+
     if (!activeRoomKey) {
       setMessages([]);
       return;
@@ -236,7 +265,7 @@ export default function App() {
     }
 
     setMessages((data ?? []) as ChatMessage[]);
-  }, [activeRoomKey]);
+  }, [supabase, activeRoomKey]);
 
   useEffect(() => {
     if (!userId) {
@@ -249,6 +278,10 @@ export default function App() {
       setSelectedMyMediaUnlockDraft("");
       setSelectedMyMediaTextDraft("");
       setTargetMediaItems([]);
+      return;
+    }
+
+    if (!supabase) {
       return;
     }
 
@@ -278,7 +311,7 @@ export default function App() {
     };
 
     void ensureAndLoad();
-  }, [loadMyMedia, loadProfiles, userId]);
+  }, [loadMyMedia, loadProfiles, supabase, userId]);
 
   useEffect(() => {
     void loadTargetMedia();
@@ -287,6 +320,10 @@ export default function App() {
   useEffect(() => {
     if (!activeRoomKey || !selectedProfileId) {
       setMessages([]);
+      return;
+    }
+
+    if (!supabase) {
       return;
     }
 
@@ -321,13 +358,18 @@ export default function App() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [activeRoomKey, loadMessages, loadTargetMedia, refreshProgress, selectedProfileId]);
+  }, [activeRoomKey, loadMessages, loadTargetMedia, refreshProgress, selectedProfileId, supabase]);
 
   const handleEmailPasswordLogin = async (
     event: FormEvent<HTMLFormElement>
   ): Promise<void> => {
     event.preventDefault();
     setAuthError(null);
+
+    if (!supabase) {
+      setAuthError("Supabase ist nicht konfiguriert.");
+      return;
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -347,6 +389,11 @@ export default function App() {
     setEmail(demoEmail);
     setPassword(demoPassword);
 
+    if (!supabase) {
+      setAuthError("Supabase ist nicht konfiguriert.");
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email: demoEmail,
       password: demoPassword
@@ -360,6 +407,9 @@ export default function App() {
   const handleSignOut = async (): Promise<void> => {
     setSelectedProfileId(null);
     setMessages([]);
+    if (!supabase) {
+      return;
+    }
     await supabase.auth.signOut();
   };
 
@@ -378,6 +428,10 @@ export default function App() {
     }
 
     setAppError(null);
+    if (!supabase) {
+      setAppError("Supabase ist nicht konfiguriert.");
+      return;
+    }
     const { data, error } = await supabase
       .from("messages")
       .insert({
@@ -418,6 +472,11 @@ export default function App() {
       return;
     }
 
+    if (!supabase) {
+      setAppError("Supabase ist nicht konfiguriert.");
+      return;
+    }
+
     const value = Number.parseInt(selectedMyMediaUnlockDraft.trim(), 10);
     if (!Number.isFinite(value) || value < 0) {
       setAppError("Ungültiger Wert (>= 0).");
@@ -446,6 +505,17 @@ export default function App() {
 
     await loadMyMedia();
   };
+
+  if (!supabase) {
+    return (
+      <main>
+        <section>
+          <h1>Supabase nicht konfiguriert</h1>
+          <p>Setze VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY (Vite env) und starte den Dev-Server neu.</p>
+        </section>
+      </main>
+    );
+  }
 
   if (!session) {
     return (
