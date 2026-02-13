@@ -15,7 +15,7 @@ Minimaler lokaler POC für diesen Use Case:
 1. Dependencies installieren:
 
 ```bash
-npm install
+npm ci
 ```
 
 2. Umgebungsvariablen setzen:
@@ -46,6 +46,19 @@ npm run seed:users
 ```bash
 npm run dev
 ```
+
+
+## Tests & Build (Local/CI)
+
+CI-freundliche Kommandos ("npm test" nutzt `vitest run`):
+
+```bash
+npm ci
+npm test
+npm run build
+```
+
+Secret-Hygiene: `.env` ist via `.gitignore` ausgeschlossen; bitte nur `.env.example` committen.
 
 ## Demo-Accounts
 
