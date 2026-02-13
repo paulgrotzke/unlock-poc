@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
+import { decideUnlocked } from "./lib/unlock";
 import { ChatMessage, ChatProgress, MediaItem, Profile } from "./types";
 
 const DEMO_USERS = [
@@ -18,6 +19,8 @@ const EMPTY_PROGRESS: ChatProgress = {
   target_sent: 0,
   unlocked: false
 };
+
+const CHAT_UNLOCK_MIN_MESSAGES = 3;
 
 const MEDIA_SELECT_COLUMNS =
   "id,owner_id,seed_key,kind,url,text_content,label,unlock_min_messages,created_at" as const;
@@ -117,7 +120,11 @@ export default function App() {
         [targetUserId]: {
           viewer_sent: Number(row.viewer_sent),
           target_sent: Number(row.target_sent),
-          unlocked: Boolean(row.unlocked)
+          unlocked: decideUnlocked(
+            Number(row.viewer_sent),
+            Number(row.target_sent),
+            CHAT_UNLOCK_MIN_MESSAGES
+          )
         }
       }));
     },
@@ -211,7 +218,11 @@ export default function App() {
         accumulator[row.id] = {
           viewer_sent: Number(row.viewer_sent),
           target_sent: Number(row.target_sent),
-          unlocked: Boolean(row.unlocked)
+          unlocked: decideUnlocked(
+            Number(row.viewer_sent),
+            Number(row.target_sent),
+            CHAT_UNLOCK_MIN_MESSAGES
+          )
         };
         return accumulator;
       }, {})
