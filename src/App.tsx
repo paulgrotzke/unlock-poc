@@ -28,6 +28,32 @@ type ChatTargetRow = Profile & {
   unlocked: boolean;
 };
 
+function SupabaseSetupScreen(): JSX.Element {
+  return (
+    <main>
+      <section>
+        <h1>Supabase ist nicht konfiguriert</h1>
+        <p>
+          Setze die folgenden Vite Env Vars und starte den Dev-Server neu
+          (Vite liest Env Vars nur beim Start ein).
+        </p>
+        <p>
+          Tipp: Lege im Projekt-Root eine <code>.env.local</code> an:
+        </p>
+        <pre>{`VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY`}</pre>
+        <p>
+          Danach: <code>npm run dev</code>.
+        </p>
+        <p>
+          Wichtig: Nur Variablen mit <code>VITE_</code>-Prefix sind im Browser
+          verfuegbar.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState(DEMO_USERS[0].email);
@@ -508,14 +534,7 @@ export default function App() {
   };
 
   if (!supabaseConfig) {
-    return (
-      <main>
-        <section>
-          <h1>Supabase nicht konfiguriert</h1>
-          <p>Setze VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY (Vite env) und starte den Dev-Server neu.</p>
-        </section>
-      </main>
-    );
+    return <SupabaseSetupScreen />;
   }
 
   if (!session) {
