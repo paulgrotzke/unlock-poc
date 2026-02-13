@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Session } from "@supabase/supabase-js";
-import { getSupabaseClient } from "./lib/supabase";
+import { getSupabaseClient, getSupabaseConfig } from "./lib/supabase";
 import { ChatMessage, ChatProgress, MediaItem, Profile } from "./types";
 
 const DEMO_USERS = [
@@ -66,6 +66,7 @@ export default function App() {
     return buildRoomKey(userId, selectedProfileId);
   }, [selectedProfileId, userId]);
 
+  const supabaseConfig = useMemo(() => getSupabaseConfig(), []);
   const supabase = useMemo(() => getSupabaseClient(), []);
 
   useEffect(() => {
@@ -506,7 +507,7 @@ export default function App() {
     await loadMyMedia();
   };
 
-  if (!supabase) {
+  if (!supabaseConfig) {
     return (
       <main>
         <section>
