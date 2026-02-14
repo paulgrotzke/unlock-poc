@@ -447,6 +447,33 @@ export default function App() {
     await loadMyMedia();
   };
 
+  const handleDeleteMyMedia = async (item: MediaItem): Promise<void> => {
+    if (!userId || item.owner_id !== userId) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      `Item ${item.label ?? `#${item.id}`} wirklich loeschen?`
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setAppError(null);
+    const { error } = await supabase.from("media_items").delete().eq("id", item.id);
+
+    if (error) {
+      setAppError(error.message);
+      return;
+    }
+
+    setMyMediaItems((previous) => previous.filter((entry) => entry.id !== item.id));
+    if (selectedMyMediaId === item.id) {
+      setSelectedMyMediaId(null);
+    }
+  };
+
   if (!session) {
     return (
       <main>
@@ -543,6 +570,11 @@ export default function App() {
 	              >
 	                Auswaehlen {item.label ?? `#${item.id}`} ({item.kind})
 	              </button>
+	              {item.owner_id === userId ? (
+	                <button type="button" onClick={() => void handleDeleteMyMedia(item)}>
+	                  Loeschen
+	                </button>
+	              ) : null}
 	              <div>Unlock ab: {item.unlock_min_messages}</div>
 	              {item.kind === "image" ? (
 	                item.url ? (
